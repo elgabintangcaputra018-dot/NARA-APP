@@ -100,7 +100,12 @@ export default function SchedulePage() {
   }, [currentWeekStart]);
 
   useEffect(() => {
-    fetchScheduleData();
+    // Check and recover overdue auto-generated sessions on mount
+    fetch("/api/schedule/replan", { method: "POST" })
+      .catch((err) => console.error("Replan check error:", err))
+      .finally(() => {
+        fetchScheduleData();
+      });
   }, [fetchScheduleData]);
 
   const handlePrevWeek = () => {
@@ -418,9 +423,19 @@ export default function SchedulePage() {
                                 <span className="font-bold text-[11px] truncate block leading-tight">
                                   {session.title}
                                 </span>
-                                {isCompleted && (
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {session.source === "auto_generated" && (
+                                    <span
+                                      className="px-1 py-0.5 rounded text-[8px] font-black bg-accent-navy text-white shadow-2xs leading-none"
+                                      title="Auto-generated dari silabus"
+                                    >
+                                      AUTO
+                                    </span>
+                                  )}
+                                  {isCompleted && (
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  )}
+                                </div>
                               </div>
                               <div className="flex items-center justify-between text-[9px] text-zinc-500 dark:text-zinc-400 mt-1">
                                 <span className="truncate">{session.subject?.name}</span>

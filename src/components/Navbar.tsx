@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   FileEdit,
+  Layers,
 } from "lucide-react";
 
 export const Navbar = () => {
@@ -24,6 +25,7 @@ export const Navbar = () => {
 
   const navItems = [
     { href: "/dashboard", label: "Beranda", icon: LayoutDashboard },
+    { href: "/dashboard/syllabus", label: "Silabus", icon: Layers },
     { href: "/dashboard/notes", label: "Catatan", icon: FileEdit },
     { href: "/dashboard/files", label: "Materi & Dokumen", icon: FileText },
     { href: "/dashboard/schedule", label: "Jadwal Belajar", icon: Calendar },

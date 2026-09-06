@@ -52,6 +52,7 @@ export interface StudySession {
   id: string;
   workspace_id: string;
   subject_id: string;
+  topic_id?: string | null;
   title: string;
   start_time: string;
   duration_minutes: number;
@@ -160,6 +161,32 @@ export interface NoteAttachment {
   file?: StudyFile | null;
 }
 
+export interface Syllabus {
+  id: string;
+  workspace_id: string;
+  subject_id: string;
+  file_id: string | null;
+  title: string;
+  deadline: string | null;
+  created_at: string;
+  subject?: Subject | null;
+  file?: StudyFile | null;
+  topics?: SyllabusTopic[];
+  total_topics?: number;
+  completed_topics?: number;
+  progress_percentage?: number;
+}
+
+export interface SyllabusTopic {
+  id: string;
+  syllabus_id: string;
+  title: string;
+  order_index: number;
+  weight: number; // 1 to 5 (manual user evaluation)
+  estimated_minutes: number;
+  status: "not_started" | "in_progress" | "completed";
+}
+
 interface LocalDB {
   workspaces: Workspace[];
   license_codes: LicenseCode[];
@@ -176,6 +203,8 @@ interface LocalDB {
   note_tags: NoteTag[];
   note_links: NoteLink[];
   note_attachments: NoteAttachment[];
+  syllabi: Syllabus[];
+  syllabus_topics: SyllabusTopic[];
 }
 
 const LOCAL_DB_PATH = path.join(process.cwd(), ".nara-local-db.json");
@@ -210,6 +239,8 @@ function readLocalDB(): LocalDB {
     note_tags: [],
     note_links: [],
     note_attachments: [],
+    syllabi: [],
+    syllabus_topics: [],
   };
 
   try {
@@ -232,6 +263,8 @@ function readLocalDB(): LocalDB {
         note_tags: parsed.note_tags || [],
         note_links: parsed.note_links || [],
         note_attachments: parsed.note_attachments || [],
+        syllabi: parsed.syllabi || [],
+        syllabus_topics: parsed.syllabus_topics || [],
       };
     }
   } catch (err) {
@@ -714,6 +747,7 @@ export async function getStudySessions(
 export async function createStudySession(data: {
   workspace_id: string;
   subject_id: string;
+  topic_id?: string | null;
   title: string;
   start_time: string;
   duration_minutes: number;
@@ -725,6 +759,7 @@ export async function createStudySession(data: {
     id: crypto.randomUUID(),
     workspace_id: data.workspace_id,
     subject_id: data.subject_id,
+    topic_id: data.topic_id || null,
     title: data.title,
     start_time: data.start_time,
     duration_minutes: data.duration_minutes || 60,
@@ -1712,5 +1747,395 @@ export async function deleteNoteAttachment(attachmentId: string, _workspaceId?: 
   writeLocalDB(db);
   return db.note_attachments.length < initLen;
 }
+
+// ==========================================
+// --- SYLLABUS & TOPICS (FASE 6) ---
+// ==========================================
+
+export async function createSyllabus(data: {
+  workspace_id: string;
+  subject_id: string;
+  file_id?: string | null;
+  title: string;
+  deadline?: string | null;
+  topics: Array<{
+    title: string;
+    order_index?: number;
+    weight?: number;
+    estimated_minutes?: number;
+    status?: "not_started" | "in_progress" | "completed";
+  }>;
+}): Promise<Syllabus> {
+  const syllabusId = `syl_${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+
+  const newSyllabus: Syllabus = {
+    id: syllabusId,
+    workspace_id: data.workspace_id,
+    subject_id: data.subject_id,
+    file_id: data.file_id || null,
+    title: data.title || "Silabus Pembinaan OSN",
+    deadline: data.deadline || null,
+    created_at: now,
+  };
+
+  const createdTopics: SyllabusTopic[] = data.topics.map((t, idx) => ({
+    id: `top_${crypto.randomUUID()}`,
+    syllabus_id: syllabusId,
+    title: t.title.trim(),
+    order_index: t.order_index ?? idx,
+    weight: Math.min(5, Math.max(1, t.weight ?? 3)),
+    estimated_minutes: t.estimated_minutes ?? 60,
+    status: t.status || "not_started",
+  }));
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: sData, error: sErr } = await supabase
+      .from("syllabi")
+      .insert(newSyllabus)
+      .select()
+      .single();
+    if (sErr) throw new Error(sErr.message);
+
+    if (createdTopics.length > 0) {
+      const { error: tErr } = await supabase.from("syllabus_topics").insert(createdTopics);
+      if (tErr) throw new Error(tErr.message);
+    }
+
+    return {
+      ...sData,
+      topics: createdTopics,
+      total_topics: createdTopics.length,
+      completed_topics: 0,
+      progress_percentage: 0,
+    };
+  }
+
+  const db = readLocalDB();
+  if (!db.syllabi) db.syllabi = [];
+  if (!db.syllabus_topics) db.syllabus_topics = [];
+
+  db.syllabi.push(newSyllabus);
+  db.syllabus_topics.push(...createdTopics);
+  writeLocalDB(db);
+
+  const subject = (db.subjects || []).find((s) => s.id === data.subject_id) || null;
+  const file = data.file_id ? (db.study_files || []).find((f) => f.id === data.file_id) || null : null;
+
+  return {
+    ...newSyllabus,
+    subject,
+    file,
+    topics: createdTopics,
+    total_topics: createdTopics.length,
+    completed_topics: 0,
+    progress_percentage: 0,
+  };
+}
+
+export async function getSyllabi(workspaceId: string): Promise<Syllabus[]> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: syllabi, error } = await supabase
+      .from("syllabi")
+      .select("*, subject:subjects(*), file:study_files(*)")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    const sIds = (syllabi || []).map((s) => s.id);
+    let allTopics: SyllabusTopic[] = [];
+    if (sIds.length > 0) {
+      const { data: tData } = await supabase
+        .from("syllabus_topics")
+        .select("*")
+        .in("syllabus_id", sIds);
+      allTopics = tData || [];
+    }
+
+    return (syllabi || []).map((s) => {
+      const topics = allTopics.filter((t) => t.syllabus_id === s.id);
+      const completed = topics.filter((t) => t.status === "completed").length;
+      const total = topics.length;
+      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return {
+        ...s,
+        topics,
+        total_topics: total,
+        completed_topics: completed,
+        progress_percentage: progress,
+      };
+    });
+  }
+
+  const db = readLocalDB();
+  const list = (db.syllabi || []).filter((s) => s.workspace_id === workspaceId);
+
+  return list.map((s) => {
+    const subject = (db.subjects || []).find((sub) => sub.id === s.subject_id) || null;
+    const file = s.file_id ? (db.study_files || []).find((f) => f.id === s.file_id) || null : null;
+    const topics = (db.syllabus_topics || []).filter((t) => t.syllabus_id === s.id);
+    const completed = topics.filter((t) => t.status === "completed").length;
+    const total = topics.length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return {
+      ...s,
+      subject,
+      file,
+      topics,
+      total_topics: total,
+      completed_topics: completed,
+      progress_percentage: progress,
+    };
+  });
+}
+
+export async function getSyllabusById(
+  id: string,
+  workspaceId: string
+): Promise<Syllabus | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: s, error } = await supabase
+      .from("syllabi")
+      .select("*, subject:subjects(*), file:study_files(*)")
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+
+    if (error || !s) return null;
+
+    const { data: topics } = await supabase
+      .from("syllabus_topics")
+      .select("*")
+      .eq("syllabus_id", id)
+      .order("order_index", { ascending: true });
+
+    const topicList = topics || [];
+    const completed = topicList.filter((t) => t.status === "completed").length;
+    const total = topicList.length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return {
+      ...s,
+      topics: topicList,
+      total_topics: total,
+      completed_topics: completed,
+      progress_percentage: progress,
+    };
+  }
+
+  const db = readLocalDB();
+  const s = (db.syllabi || []).find((item) => item.id === id && item.workspace_id === workspaceId);
+  if (!s) return null;
+
+  const subject = (db.subjects || []).find((sub) => sub.id === s.subject_id) || null;
+  const file = s.file_id ? (db.study_files || []).find((f) => f.id === s.file_id) || null : null;
+  const topics = (db.syllabus_topics || [])
+    .filter((t) => t.syllabus_id === id)
+    .sort((a, b) => a.order_index - b.order_index);
+
+  const completed = topics.filter((t) => t.status === "completed").length;
+  const total = topics.length;
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return {
+    ...s,
+    subject,
+    file,
+    topics,
+    total_topics: total,
+    completed_topics: completed,
+    progress_percentage: progress,
+  };
+}
+
+export async function updateSyllabus(
+  id: string,
+  workspaceId: string,
+  data: {
+    title?: string;
+    subject_id?: string;
+    file_id?: string | null;
+    deadline?: string | null;
+  }
+): Promise<Syllabus | null> {
+  const cleanData: Record<string, unknown> = {};
+  if (data.title !== undefined) cleanData.title = data.title;
+  if (data.subject_id !== undefined) cleanData.subject_id = data.subject_id;
+  if (data.file_id !== undefined) cleanData.file_id = data.file_id;
+  if (data.deadline !== undefined) cleanData.deadline = data.deadline;
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("syllabi")
+      .update(cleanData)
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .maybeSingle();
+    if (error || !updated) return null;
+    return getSyllabusById(id, workspaceId);
+  }
+
+  const db = readLocalDB();
+  const idx = (db.syllabi || []).findIndex((s) => s.id === id && s.workspace_id === workspaceId);
+  if (idx === -1) return null;
+
+  db.syllabi[idx] = {
+    ...db.syllabi[idx],
+    ...cleanData,
+  };
+  writeLocalDB(db);
+  return getSyllabusById(id, workspaceId);
+}
+
+export async function deleteSyllabus(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("syllabi")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.syllabi || []).length;
+  db.syllabi = (db.syllabi || []).filter((s) => !(s.id === id && s.workspace_id === workspaceId));
+  // Cascade topics
+  db.syllabus_topics = (db.syllabus_topics || []).filter((t) => t.syllabus_id !== id);
+  writeLocalDB(db);
+  return db.syllabi.length < initLen;
+}
+
+export async function updateSyllabusTopic(
+  topicId: string,
+  data: {
+    title?: string;
+    weight?: number;
+    estimated_minutes?: number;
+    status?: "not_started" | "in_progress" | "completed";
+  },
+  _workspaceId?: string
+): Promise<SyllabusTopic | null> {
+  void _workspaceId;
+  const cleanData: Record<string, unknown> = {};
+  if (data.title !== undefined) cleanData.title = data.title;
+  if (data.weight !== undefined) cleanData.weight = data.weight;
+  if (data.estimated_minutes !== undefined) cleanData.estimated_minutes = data.estimated_minutes;
+  if (data.status !== undefined) cleanData.status = data.status;
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("syllabus_topics")
+      .update(cleanData)
+      .eq("id", topicId)
+      .select()
+      .maybeSingle();
+    if (error || !updated) return null;
+    return updated;
+  }
+
+  const db = readLocalDB();
+  const idx = (db.syllabus_topics || []).findIndex((t) => t.id === topicId);
+  if (idx === -1) return null;
+
+  db.syllabus_topics[idx] = {
+    ...db.syllabus_topics[idx],
+    ...cleanData,
+  };
+  writeLocalDB(db);
+  return db.syllabus_topics[idx];
+}
+
+export async function deleteSyllabusTopic(topicId: string, _workspaceId?: string): Promise<boolean> {
+  void _workspaceId;
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("syllabus_topics").delete().eq("id", topicId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.syllabus_topics || []).length;
+  db.syllabus_topics = (db.syllabus_topics || []).filter((t) => t.id !== topicId);
+  writeLocalDB(db);
+  return db.syllabus_topics.length < initLen;
+}
+
+export async function createSyllabusTopic(
+  syllabusId: string,
+  data: {
+    title: string;
+    weight?: number;
+    estimated_minutes?: number;
+    status?: "not_started" | "in_progress" | "completed";
+  },
+  _workspaceId?: string
+): Promise<SyllabusTopic> {
+  void _workspaceId;
+  const newTopic: SyllabusTopic = {
+    id: `top_${crypto.randomUUID()}`,
+    syllabus_id: syllabusId,
+    title: data.title.trim(),
+    order_index: Date.now(),
+    weight: Math.min(5, Math.max(1, data.weight ?? 3)),
+    estimated_minutes: data.estimated_minutes ?? 60,
+    status: data.status || "not_started",
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("syllabus_topics")
+      .insert(newTopic)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.syllabus_topics) db.syllabus_topics = [];
+  db.syllabus_topics.push(newTopic);
+  writeLocalDB(db);
+  return newTopic;
+}
+
+// Re-plan helper: Detect overdue auto-generated study sessions and keep topics not_started
+export async function getOverdueAutoSessions(workspaceId: string): Promise<StudySession[]> {
+  const nowIso = new Date().toISOString();
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("study_sessions")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("source", "auto_generated")
+      .eq("status", "planned")
+      .lt("start_time", nowIso);
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  const db = readLocalDB();
+  return (db.study_sessions || []).filter(
+    (s) =>
+      s.workspace_id === workspaceId &&
+      s.source === "auto_generated" &&
+      s.status === "planned" &&
+      s.start_time < nowIso
+  );
+}
+
 
 
