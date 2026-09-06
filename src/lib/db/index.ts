@@ -74,6 +74,31 @@ export interface CalendarConnection {
   updated_at: string;
 }
 
+export interface StudyFile {
+  id: string;
+  workspace_id: string;
+  file_name: string;
+  file_type: "pdf" | "image";
+  storage_path: string;
+  file_size: number;
+  uploaded_at: string;
+}
+
+export interface AnnotationRecord {
+  id: string;
+  workspace_id: string;
+  file_id: string;
+  page_number: number;
+  stroke_type: "freehand" | "highlight" | "circle" | "arrow" | "text";
+  svg_path: string;
+  color: string;
+  stroke_width: number;
+  layer_visible: boolean;
+  sync_status: "synced" | "pending" | "conflict";
+  created_at: string;
+  updated_at: string;
+}
+
 interface LocalDB {
   workspaces: Workspace[];
   license_codes: LicenseCode[];
@@ -82,6 +107,8 @@ interface LocalDB {
   subjects: Subject[];
   study_sessions: StudySession[];
   calendar_connections: CalendarConnection[];
+  study_files: StudyFile[];
+  annotations: AnnotationRecord[];
 }
 
 const LOCAL_DB_PATH = path.join(process.cwd(), ".nara-local-db.json");
@@ -108,6 +135,8 @@ function readLocalDB(): LocalDB {
     subjects: [],
     study_sessions: [],
     calendar_connections: [],
+    study_files: [],
+    annotations: [],
   };
 
   try {
@@ -122,6 +151,8 @@ function readLocalDB(): LocalDB {
         subjects: parsed.subjects || [],
         study_sessions: parsed.study_sessions || [],
         calendar_connections: parsed.calendar_connections || [],
+        study_files: parsed.study_files || [],
+        annotations: parsed.annotations || [],
       };
     }
   } catch (err) {
@@ -790,5 +821,218 @@ export async function updateCalendarSettings(
 
 export async function disconnectCalendar(workspaceId: string): Promise<boolean> {
   return (await updateCalendarSettings(workspaceId, { is_connected: false })) !== null;
+}
+
+// ==========================================
+// STUDY FILES API
+// ==========================================
+
+export async function getStudyFiles(workspaceId: string): Promise<StudyFile[]> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("study_files")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("uploaded_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  const db = readLocalDB();
+  return (db.study_files || [])
+    .filter((f) => f.workspace_id === workspaceId)
+    .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+}
+
+export async function getStudyFileById(id: string, workspaceId: string): Promise<StudyFile | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("study_files")
+      .select("*")
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
+  }
+
+  const db = readLocalDB();
+  return (db.study_files || []).find((f) => f.id === id && f.workspace_id === workspaceId) || null;
+}
+
+export async function createStudyFile(data: {
+  workspace_id: string;
+  file_name: string;
+  file_type: "pdf" | "image";
+  storage_path: string;
+  file_size?: number;
+}): Promise<StudyFile> {
+  const fileRecord: StudyFile = {
+    id: `file_${crypto.randomUUID()}`,
+    workspace_id: data.workspace_id,
+    file_name: data.file_name,
+    file_type: data.file_type,
+    storage_path: data.storage_path,
+    file_size: data.file_size || 0,
+    uploaded_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("study_files")
+      .insert({
+        workspace_id: fileRecord.workspace_id,
+        file_name: fileRecord.file_name,
+        file_type: fileRecord.file_type,
+        storage_path: fileRecord.storage_path,
+        file_size: fileRecord.file_size,
+        uploaded_at: fileRecord.uploaded_at,
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.study_files) db.study_files = [];
+  db.study_files.push(fileRecord);
+  writeLocalDB(db);
+  return fileRecord;
+}
+
+export async function deleteStudyFile(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("study_files")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLength = (db.study_files || []).length;
+  db.study_files = (db.study_files || []).filter((f) => !(f.id === id && f.workspace_id === workspaceId));
+  // Cascade delete annotations
+  db.annotations = (db.annotations || []).filter((a) => a.file_id !== id);
+  writeLocalDB(db);
+  return db.study_files.length < initLength;
+}
+
+// ==========================================
+// ANNOTATIONS API
+// ==========================================
+
+export async function getAnnotationsByFile(
+  fileId: string,
+  workspaceId: string,
+  pageNumber?: number
+): Promise<AnnotationRecord[]> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("annotations")
+      .select("*")
+      .eq("file_id", fileId)
+      .eq("workspace_id", workspaceId);
+    if (typeof pageNumber === "number") {
+      query = query.eq("page_number", pageNumber);
+    }
+    const { data, error } = await query.order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  const db = readLocalDB();
+  return (db.annotations || []).filter((a) => {
+    if (a.file_id !== fileId || a.workspace_id !== workspaceId) return false;
+    if (typeof pageNumber === "number" && a.page_number !== pageNumber) return false;
+    return true;
+  });
+}
+
+export async function upsertAnnotationsBatch(
+  workspaceId: string,
+  fileId: string,
+  items: Array<
+    Partial<AnnotationRecord> & {
+      id: string;
+      svg_path: string;
+      stroke_type: "freehand" | "highlight" | "circle" | "arrow" | "text";
+      color: string;
+      stroke_width: number;
+      page_number?: number;
+    }
+  >
+): Promise<AnnotationRecord[]> {
+  const now = new Date().toISOString();
+  const sanitizedItems: AnnotationRecord[] = items.map((item) => ({
+    id: item.id || `anno_${crypto.randomUUID()}`,
+    workspace_id: workspaceId,
+    file_id: fileId,
+    page_number: item.page_number ?? 1,
+    stroke_type: item.stroke_type,
+    svg_path: item.svg_path,
+    color: item.color,
+    stroke_width: item.stroke_width,
+    layer_visible: item.layer_visible ?? true,
+    sync_status: "synced",
+    created_at: item.created_at || now,
+    updated_at: item.updated_at || now,
+  }));
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("annotations")
+      .upsert(sanitizedItems, { onConflict: "id" })
+      .select();
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  const db = readLocalDB();
+  if (!db.annotations) db.annotations = [];
+
+  for (const item of sanitizedItems) {
+    const existingIndex = db.annotations.findIndex((a) => a.id === item.id);
+    if (existingIndex !== -1) {
+      // Last-write-wins based on updated_at
+      const existing = db.annotations[existingIndex];
+      if (new Date(item.updated_at).getTime() >= new Date(existing.updated_at).getTime()) {
+        db.annotations[existingIndex] = item;
+      }
+    } else {
+      db.annotations.push(item);
+    }
+  }
+
+  writeLocalDB(db);
+  return sanitizedItems;
+}
+
+export async function deleteAnnotation(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("annotations")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLength = (db.annotations || []).length;
+  db.annotations = (db.annotations || []).filter((a) => !(a.id === id && a.workspace_id === workspaceId));
+  writeLocalDB(db);
+  return db.annotations.length < initLength;
 }
 

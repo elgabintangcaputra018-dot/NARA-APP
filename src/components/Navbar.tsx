@@ -7,6 +7,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import {
   Calendar,
   BookOpen,
+  FileText,
   Laptop,
   Globe,
   LayoutDashboard,
@@ -22,6 +23,7 @@ export const Navbar = () => {
 
   const navItems = [
     { href: "/dashboard", label: "Beranda", icon: LayoutDashboard },
+    { href: "/dashboard/files", label: "Materi & Dokumen", icon: FileText },
     { href: "/dashboard/schedule", label: "Jadwal Belajar", icon: Calendar },
     { href: "/dashboard/subjects", label: "Mata Pelajaran", icon: BookOpen },
     { href: "/dashboard/settings/devices", label: "Perangkat", icon: Laptop },

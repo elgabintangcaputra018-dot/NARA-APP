@@ -187,15 +187,21 @@ export default async function DashboardPage() {
               </div>
             </Link>
 
-            <div className="p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 flex items-center justify-center shrink-0">
+            <Link
+              href="/dashboard/files"
+              className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-950/20 hover:border-emerald-500/50 flex items-start gap-3.5 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Anotasi PDF & Tutup Label</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Anotasi PDF & Tutup Label</p>
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Aktif</span>
+                </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">Coret materi offline & mode tebak diagram untuk active recall.</p>
               </div>
-            </div>
+            </Link>
 
             <div className="p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 flex items-center justify-center shrink-0">
