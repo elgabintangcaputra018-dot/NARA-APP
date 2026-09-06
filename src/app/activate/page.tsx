@@ -103,8 +103,9 @@ export default function ActivatePage() {
           <span className="font-extrabold text-xl tracking-tight text-black dark:text-white">
             NARA
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent font-semibold border border-accent/20">
-            OSN Companion
+          <span className="text-xs px-2.5 py-1 rounded-full bg-accent-navy/5 dark:bg-accent-navy/80 text-accent-navy dark:text-accent-light font-semibold border border-accent/30 flex items-center gap-1.5 shadow-sm">
+            <Sparkles className="w-3 h-3 text-highlight shrink-0" />
+            <span>OSN Companion</span>
           </span>
         </div>
         <ThemeToggle />
@@ -112,9 +113,10 @@ export default function ActivatePage() {
 
       {/* Main Activation Card */}
       <main className="w-full max-w-md mx-auto my-auto py-8">
-        <div className="bg-white dark:bg-surface-card-dark rounded-3xl p-7 md:p-9 shadow-lg border border-surface-border-light dark:border-surface-border-dark flex flex-col items-center text-center relative overflow-hidden">
-          {/* Decorative accent top bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-accent via-blue-500 to-accent-light" />
+        <div className="bg-white dark:bg-surface-card-dark rounded-3xl p-7 md:p-9 shadow-xl border border-surface-border-light dark:border-surface-border-dark flex flex-col items-center text-center relative overflow-hidden">
+          {/* Decorative accent top bar with navy, #6B95F1, and subtle warm gold highlight */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-accent-navy via-accent to-accent-light" />
+          <div className="absolute top-0 right-8 w-8 h-1.5 bg-highlight/80" />
 
           {/* Nara Mascot & Greeting */}
           <div className="mb-6 flex flex-col items-center">
@@ -189,22 +191,22 @@ export default function ActivatePage() {
             <button
               type="submit"
               disabled={loading || Boolean(success)}
-              className="w-full py-3.5 px-5 rounded-2xl bg-accent hover:bg-accent-dark text-white font-semibold text-sm transition-all shadow-md shadow-accent/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed group active:scale-[0.99]"
+              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-accent-navy via-accent-navy-light to-accent-dark hover:from-accent-navy-light hover:to-accent text-white font-semibold text-sm transition-all shadow-md shadow-accent-navy/20 border border-accent/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed group active:scale-[0.99]"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-accent-light" />
                   <span>Memverifikasi Kode...</span>
                 </>
               ) : success ? (
                 <>
-                  <Sparkles className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 text-highlight" />
                   <span>Masuk ke Dashboard...</span>
                 </>
               ) : (
                 <>
                   <span>Mulai Belajar Sekarang</span>
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                  <ArrowRight className="w-4 h-4 text-accent-light transition-transform group-hover:translate-x-0.5" />
                 </>
               )}
             </button>
@@ -214,7 +216,7 @@ export default function ActivatePage() {
           {deviceInfo && (
             <div className="w-full mt-6 pt-5 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-left">
               <div className="flex items-center gap-2.5 text-zinc-500 dark:text-zinc-400 text-xs">
-                <Smartphone className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+                <Smartphone className="w-4 h-4 text-accent dark:text-accent-light" />
                 <div>
                   <p className="font-medium text-zinc-700 dark:text-zinc-300">
                     {deviceInfo.deviceName}
@@ -224,8 +226,9 @@ export default function ActivatePage() {
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium">
-                Perangkat Terverifikasi
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-accent-subtle dark:bg-accent-subtle-dark text-accent-dark dark:text-accent-light font-semibold border border-accent/20 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-highlight" />
+                Terverifikasi
               </span>
             </div>
           )}

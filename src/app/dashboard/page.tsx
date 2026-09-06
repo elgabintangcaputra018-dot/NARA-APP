@@ -16,9 +16,7 @@ import {
   LogOut,
   ChevronRight,
   ShieldCheck,
-  CheckCircle2,
   Clock,
-  Flame,
 } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -55,12 +53,13 @@ export default async function DashboardPage() {
             <div className="w-9 h-9 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-extrabold text-sm tracking-widest shadow-sm">
               N
             </div>
-            <div>
+            <div className="flex items-center">
               <span className="font-extrabold text-lg tracking-tight text-zinc-900 dark:text-zinc-100">
                 NARA
               </span>
-              <span className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
-                OSN Companion
+              <span className="ml-2 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-accent-navy/5 dark:bg-accent-navy/80 text-accent-navy dark:text-accent-light border border-accent/30 inline-flex items-center gap-1.5 shadow-sm">
+                <Sparkles className="w-3 h-3 text-highlight shrink-0" />
+                <span>OSN Companion</span>
               </span>
             </div>
           </div>
@@ -84,11 +83,15 @@ export default async function DashboardPage() {
       {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-8 py-8 space-y-8">
         {/* Welcome & Companion Hero Card */}
-        <section className="bg-gradient-to-br from-white to-zinc-50 dark:from-surface-card-dark dark:to-zinc-900/60 rounded-3xl p-6 md:p-8 border border-surface-border-light dark:border-surface-border-dark shadow-sm relative overflow-hidden">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+        <section className="bg-gradient-to-br from-white via-surface-card-light to-accent-subtle/40 dark:from-surface-card-dark dark:via-zinc-900/60 dark:to-accent-navy/30 rounded-3xl p-6 md:p-8 border border-surface-border-light dark:border-surface-border-dark shadow-sm relative overflow-hidden">
+          {/* Subtle top indicator bar */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-accent-navy via-accent to-accent-light" />
+          <div className="absolute top-0 right-10 w-6 h-1 bg-highlight" />
+
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10 pt-1">
             <div className="space-y-3 text-center md:text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-subtle dark:bg-accent-subtle-dark border border-accent/20 text-accent-dark dark:text-accent-light text-xs font-semibold shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-highlight shrink-0" />
                 <span>Lisensi Aktif • {daysRemaining} Hari Tersisa</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-extrabold text-zinc-900 dark:text-zinc-100 tracking-tight">
@@ -116,19 +119,19 @@ export default async function DashboardPage() {
         {/* Status & Quick Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Card 1: License Status */}
-          <div className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between">
+          <div className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between hover:border-accent/30 transition-all">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Status Langganan
               </span>
-              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-accent">
+              <div className="w-8 h-8 rounded-lg bg-accent-navy/10 dark:bg-accent-navy/60 flex items-center justify-center text-accent border border-accent/20">
                 <ShieldCheck className="w-4 h-4" />
               </div>
             </div>
             <div>
               <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{planName}</p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
+                <Clock className="w-3.5 h-3.5 text-accent" />
                 Berlaku hingga: {license?.expires_at ? new Date(license.expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
               </p>
             </div>
@@ -143,7 +146,7 @@ export default async function DashboardPage() {
               <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Perangkat Terdaftar
               </span>
-              <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+              <div className="w-8 h-8 rounded-lg bg-accent-navy/10 dark:bg-accent-navy/60 flex items-center justify-center text-accent border border-accent/20 group-hover:scale-105 transition-transform">
                 <Laptop className="w-4 h-4" />
               </div>
             </div>
@@ -163,13 +166,13 @@ export default async function DashboardPage() {
           </Link>
 
           {/* Card 3: Study Cycle Progress (Foreshadowing Phase 2+) */}
-          <div className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between">
+          <div className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between hover:border-highlight/30 transition-all">
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                 Siklus Belajar OSN
               </span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600">
-                <Flame className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-highlight-subtle dark:bg-highlight-subtle-dark flex items-center justify-center text-highlight border border-highlight/30">
+                <Sparkles className="w-4 h-4" />
               </div>
             </div>
             <div>

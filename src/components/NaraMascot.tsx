@@ -90,17 +90,19 @@ export const NaraMascot: React.FC<NaraMascotProps> = ({
             <path d="M80 82 Q87 86 92 83" stroke="#18181B" strokeWidth="2.5" strokeLinecap="round" />
             <path d="M108 83 Q113 86 120 82" stroke="#18181B" strokeWidth="2.5" strokeLinecap="round" />
             <circle cx="100" cy="93" r="2.5" fill="#18181B" />
-            {/* Book held in paws */}
+            {/* Book held in paws with navy and #6B95F1 */}
             <path
               d="M75 125 L100 135 L125 125 L125 150 L100 160 L75 150 Z"
-              fill="#2563EB"
-              stroke="#1D4ED8"
+              fill="#162342"
+              stroke="#6B95F1"
               strokeWidth="2"
             />
-            <path d="M100 135 L100 160" stroke="#FFFFFF" strokeWidth="1.5" />
+            <path d="M100 135 L100 160" stroke="#6B95F1" strokeWidth="1.5" />
+            {/* Subtle warm gold bookmark ribbon */}
+            <path d="M100 135 L104 148 L100 145 L96 148 Z" fill="#E5A93C" />
             {/* Book text lines */}
-            <path d="M82 136 L94 141 M82 143 L94 148" stroke="#DBEAFE" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M106 141 L118 136 M106 148 L118 143" stroke="#DBEAFE" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M82 136 L94 141 M82 143 L94 148" stroke="#8BACF5" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M106 141 L118 136 M106 148 L118 143" stroke="#8BACF5" strokeWidth="1.5" strokeLinecap="round" />
             {/* Dark paws holding book */}
             <ellipse cx="80" cy="130" rx="6" ry="5" fill="#18181B" />
             <ellipse cx="120" cy="130" rx="6" ry="5" fill="#18181B" />
@@ -155,7 +157,7 @@ export const NaraMascot: React.FC<NaraMascotProps> = ({
             <ellipse cx="96" cy="105" rx="6" ry="8" fill="#18181B" />
             {/* Floating question mark */}
             <g className="animate-bounce">
-              <text x="135" y="60" fontSize="32" fontWeight="bold" fill="#2563EB" fontFamily="sans-serif">
+              <text x="135" y="60" fontSize="32" fontWeight="bold" fill="#6B95F1" fontFamily="sans-serif">
                 ?
               </text>
             </g>
@@ -248,13 +250,13 @@ export const NaraMascot: React.FC<NaraMascotProps> = ({
             <path d="M78 128 L88 112 L94 126 Z" fill="#FFFFFF" stroke="#D4D4D8" strokeWidth="1.5" />
             <path d="M81 125 L88 116 L91 125 Z" fill="#18181B" />
             {/* Soft sleeping zzz */}
-            <text x="135" y="70" fontSize="18" fontWeight="bold" fill="#3B82F6" opacity="0.9" fontFamily="sans-serif">
+            <text x="135" y="70" fontSize="18" fontWeight="bold" fill="#8BACF5" opacity="0.9" fontFamily="sans-serif">
               z
             </text>
-            <text x="148" y="55" fontSize="22" fontWeight="bold" fill="#2563EB" opacity="0.8" fontFamily="sans-serif">
+            <text x="148" y="55" fontSize="22" fontWeight="bold" fill="#6B95F1" opacity="0.8" fontFamily="sans-serif">
               z
             </text>
-            <text x="163" y="40" fontSize="26" fontWeight="bold" fill="#1D4ED8" opacity="0.7" fontFamily="sans-serif">
+            <text x="163" y="40" fontSize="26" fontWeight="bold" fill="#162342" className="dark:fill-accent-light" opacity="0.7" fontFamily="sans-serif">
               z
             </text>
           </svg>

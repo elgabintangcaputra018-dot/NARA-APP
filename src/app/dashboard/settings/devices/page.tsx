@@ -182,7 +182,7 @@ export default function ManageDevicesPage() {
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                   Kuota Perangkat
                 </span>
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-accent/10 text-accent">
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-navy/5 dark:bg-accent-navy/80 text-accent-navy dark:text-accent-light border border-accent/30">
                   Maksimal 3 Perangkat
                 </span>
               </div>
@@ -200,7 +200,7 @@ export default function ManageDevicesPage() {
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden flex gap-1 p-0.5">
+                <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden flex gap-1 p-0.5 border border-zinc-200/60 dark:border-zinc-700/40">
                   {[1, 2, 3].map((slot) => {
                     const isOccupied = slot <= data.quota.used;
                     return (
@@ -209,7 +209,7 @@ export default function ManageDevicesPage() {
                         className={`flex-1 h-full rounded-full transition-all ${
                           isOccupied
                             ? data.quota.used === 3
-                              ? "bg-amber-500"
+                              ? "bg-highlight"
                               : "bg-accent"
                             : "bg-zinc-200 dark:bg-zinc-700/60"
                         }`}
@@ -322,7 +322,7 @@ export default function ManageDevicesPage() {
                     className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="flex items-start gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 flex items-center justify-center text-zinc-700 dark:text-zinc-300 shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-accent-navy/10 dark:bg-accent-navy/60 flex items-center justify-center text-accent dark:text-accent-light border border-accent/20 shrink-0">
                         {device.device_name.toLowerCase().includes("iphone") ||
                         device.device_name.toLowerCase().includes("android") ? (
                           <Smartphone className="w-5 h-5" />
@@ -337,7 +337,8 @@ export default function ManageDevicesPage() {
                             {device.device_name}
                           </p>
                           {isCurrent && (
-                            <span className="px-2 py-0.5 rounded-md bg-accent text-white text-[10px] font-bold tracking-wide">
+                            <span className="px-2.5 py-0.5 rounded-md bg-gradient-to-r from-accent-navy to-accent-dark text-white text-[10px] font-bold tracking-wide border border-accent/30 shadow-xs flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-highlight" />
                               Perangkat Ini
                             </span>
                           )}

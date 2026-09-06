@@ -24,13 +24,24 @@ const config: Config = {
           "border-light": "#E5E7EB",
           "border-dark": "#27272A",
         },
-        // 3. Aksen Utama
+        // 3. Aksen Utama (Kombinasi #6B95F1 & Navy)
         accent: {
-          DEFAULT: "#2563EB",
-          light: "#3B82F6",
-          dark: "#1D4ED8",
-          subtle: "#EFF6FF",
-          "subtle-dark": "#1E293B",
+          DEFAULT: "#6B95F1", // Biru cerdas lembut
+          light: "#8BACF5",
+          dark: "#537FDC",
+          navy: "#162342",    // Navy elegan & kokoh
+          "navy-light": "#223561",
+          "navy-dark": "#0D162B",
+          subtle: "#F0F5FF",
+          "subtle-dark": "#151E33",
+        },
+        // 4. Warna Variasi Tambahan (Soft Warm Gold/Amber — dipakai sedikit untuk aksen sparkle / badge OSN)
+        highlight: {
+          DEFAULT: "#E5A93C", // Emas lembut / amber hangat
+          light: "#F3C56F",
+          dark: "#C68B25",
+          subtle: "#FEF7ED",
+          "subtle-dark": "#291E10",
         },
         // 4. Token Prioritas (untuk fase berikutnya)
         priority: {
