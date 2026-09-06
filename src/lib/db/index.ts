@@ -99,6 +99,28 @@ export interface AnnotationRecord {
   updated_at: string;
 }
 
+export interface DiagramLabel {
+  id: string;
+  workspace_id: string;
+  file_id: string;
+  page_number: number;
+  area_x: number;
+  area_y: number;
+  area_width: number;
+  area_height: number;
+  label_text: string;
+  created_at: string;
+}
+
+export interface RecallAttempt {
+  id: string;
+  workspace_id: string;
+  diagram_label_id: string;
+  correct: boolean;
+  user_answer?: string;
+  attempted_at: string;
+}
+
 interface LocalDB {
   workspaces: Workspace[];
   license_codes: LicenseCode[];
@@ -109,6 +131,8 @@ interface LocalDB {
   calendar_connections: CalendarConnection[];
   study_files: StudyFile[];
   annotations: AnnotationRecord[];
+  diagram_labels: DiagramLabel[];
+  recall_attempts: RecallAttempt[];
 }
 
 const LOCAL_DB_PATH = path.join(process.cwd(), ".nara-local-db.json");
@@ -137,6 +161,8 @@ function readLocalDB(): LocalDB {
     calendar_connections: [],
     study_files: [],
     annotations: [],
+    diagram_labels: [],
+    recall_attempts: [],
   };
 
   try {
@@ -153,10 +179,12 @@ function readLocalDB(): LocalDB {
         calendar_connections: parsed.calendar_connections || [],
         study_files: parsed.study_files || [],
         annotations: parsed.annotations || [],
+        diagram_labels: parsed.diagram_labels || [],
+        recall_attempts: parsed.recall_attempts || [],
       };
     }
   } catch (err) {
-    console.error("Error reading local db, initializing new:", err);
+    console.error("Gagal membaca local db, inisialisasi ulang:", err);
   }
 
   writeLocalDB(defaultDB);
@@ -1035,4 +1063,182 @@ export async function deleteAnnotation(id: string, workspaceId: string): Promise
   writeLocalDB(db);
   return db.annotations.length < initLength;
 }
+
+// ==========================================
+// DIAGRAM LABELS & ACTIVE RECALL API
+// ==========================================
+
+export async function createDiagramLabel(data: {
+  workspace_id: string;
+  file_id: string;
+  page_number?: number;
+  area_x: number;
+  area_y: number;
+  area_width: number;
+  area_height: number;
+  label_text: string;
+}): Promise<DiagramLabel> {
+  const newLabel: DiagramLabel = {
+    id: `label_${crypto.randomUUID()}`,
+    workspace_id: data.workspace_id,
+    file_id: data.file_id,
+    page_number: data.page_number ?? 1,
+    area_x: data.area_x,
+    area_y: data.area_y,
+    area_width: data.area_width,
+    area_height: data.area_height,
+    label_text: data.label_text.trim(),
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("diagram_labels")
+      .insert(newLabel)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.diagram_labels) db.diagram_labels = [];
+  db.diagram_labels.push(newLabel);
+  writeLocalDB(db);
+  return newLabel;
+}
+
+export async function getDiagramLabelsByFile(
+  fileId: string,
+  workspaceId: string,
+  pageNumber?: number
+): Promise<Array<DiagramLabel & { lastAttempt?: RecallAttempt | null }>> {
+  let labels: DiagramLabel[] = [];
+  let attempts: RecallAttempt[] = [];
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("diagram_labels")
+      .select("*")
+      .eq("file_id", fileId)
+      .eq("workspace_id", workspaceId);
+    if (typeof pageNumber === "number") {
+      query = query.eq("page_number", pageNumber);
+    }
+    const { data: labelsData, error } = await query.order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    labels = labelsData || [];
+
+    const labelIds = labels.map((l) => l.id);
+    if (labelIds.length > 0) {
+      const { data: attData } = await supabase
+        .from("recall_attempts")
+        .select("*")
+        .in("diagram_label_id", labelIds)
+        .order("attempted_at", { ascending: false });
+      attempts = attData || [];
+    }
+  } else {
+    const db = readLocalDB();
+    labels = (db.diagram_labels || []).filter((l) => {
+      if (l.file_id !== fileId || l.workspace_id !== workspaceId) return false;
+      if (typeof pageNumber === "number" && l.page_number !== pageNumber) return false;
+      return true;
+    });
+    attempts = db.recall_attempts || [];
+  }
+
+  // Attach latest attempt per label
+  return labels.map((label) => {
+    const labelAttempts = attempts
+      .filter((a) => a.diagram_label_id === label.id)
+      .sort((a, b) => new Date(b.attempted_at).getTime() - new Date(a.attempted_at).getTime());
+    return {
+      ...label,
+      lastAttempt: labelAttempts[0] || null,
+    };
+  });
+}
+
+export async function deleteDiagramLabel(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("diagram_labels")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLength = (db.diagram_labels || []).length;
+  db.diagram_labels = (db.diagram_labels || []).filter((l) => !(l.id === id && l.workspace_id === workspaceId));
+  // Cascade delete attempts
+  db.recall_attempts = (db.recall_attempts || []).filter((a) => a.diagram_label_id !== id);
+  writeLocalDB(db);
+  return db.diagram_labels.length < initLength;
+}
+
+export async function recordRecallAttempt(data: {
+  workspace_id: string;
+  diagram_label_id: string;
+  correct: boolean;
+  user_answer?: string;
+}): Promise<RecallAttempt> {
+  const attemptRecord: RecallAttempt = {
+    id: `attempt_${crypto.randomUUID()}`,
+    workspace_id: data.workspace_id,
+    diagram_label_id: data.diagram_label_id,
+    correct: data.correct,
+    user_answer: data.user_answer,
+    attempted_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("recall_attempts")
+      .insert(attemptRecord)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.recall_attempts) db.recall_attempts = [];
+  db.recall_attempts.push(attemptRecord);
+  writeLocalDB(db);
+  return attemptRecord;
+}
+
+export async function getRecallStatsByFile(
+  fileId: string,
+  workspaceId: string,
+  pageNumber?: number
+): Promise<{
+  totalLabels: number;
+  masteredLabels: number;
+  allMastered: boolean;
+  labels: Array<DiagramLabel & { lastAttempt?: RecallAttempt | null }>;
+}> {
+  const labelsWithAttempts = await getDiagramLabelsByFile(fileId, workspaceId, pageNumber);
+  const totalLabels = labelsWithAttempts.length;
+  const masteredLabels = labelsWithAttempts.filter(
+    (l) => l.lastAttempt && l.lastAttempt.correct === true
+  ).length;
+  const allMastered = totalLabels > 0 && masteredLabels === totalLabels;
+
+  return {
+    totalLabels,
+    masteredLabels,
+    allMastered,
+    labels: labelsWithAttempts,
+  };
+}
+
 

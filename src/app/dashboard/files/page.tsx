@@ -16,6 +16,7 @@ import {
   Sparkles,
   AlertCircle,
   FileCheck,
+  Brain,
 } from "lucide-react";
 
 export default function FilesPage() {
@@ -259,13 +260,24 @@ export default function FilesPage() {
                         <Trash2 className="w-4 h-4" />
                       </button>
 
-                      <Link
-                        href={`/dashboard/files/${file.id}/annotate`}
-                        className="px-3.5 py-1.5 rounded-xl bg-accent-navy text-white hover:bg-accent-navy-light text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all group-hover:scale-105"
-                      >
-                        <span>Buka & Anotasi</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/dashboard/files/${file.id}/recall`}
+                          className="px-2.5 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold inline-flex items-center gap-1 transition-all"
+                          title="Active Recall Diagram"
+                        >
+                          <Brain className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Recall</span>
+                        </Link>
+
+                        <Link
+                          href={`/dashboard/files/${file.id}/annotate`}
+                          className="px-3.5 py-1.5 rounded-xl bg-accent-navy text-white hover:bg-accent-navy-light text-xs font-semibold shadow-xs inline-flex items-center gap-1.5 transition-all group-hover:scale-105"
+                        >
+                          <span>Anotasi</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 );
