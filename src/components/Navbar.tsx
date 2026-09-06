@@ -15,6 +15,7 @@ import {
   Sparkles,
   Menu,
   X,
+  FileEdit,
 } from "lucide-react";
 
 export const Navbar = () => {
@@ -23,6 +24,7 @@ export const Navbar = () => {
 
   const navItems = [
     { href: "/dashboard", label: "Beranda", icon: LayoutDashboard },
+    { href: "/dashboard/notes", label: "Catatan", icon: FileEdit },
     { href: "/dashboard/files", label: "Materi & Dokumen", icon: FileText },
     { href: "/dashboard/schedule", label: "Jadwal Belajar", icon: Calendar },
     { href: "/dashboard/subjects", label: "Mata Pelajaran", icon: BookOpen },

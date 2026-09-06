@@ -121,6 +121,45 @@ export interface RecallAttempt {
   attempted_at: string;
 }
 
+export interface Note {
+  id: string;
+  workspace_id: string;
+  subject_id: string | null;
+  title: string;
+  content: Record<string, unknown> | string | null; // jsonb tiptap doc
+  search_vector?: string;
+  created_at: string;
+  updated_at: string;
+  subject?: Subject | null;
+  tags?: string[];
+  links_count?: number;
+  attachments_count?: number;
+}
+
+export interface NoteTag {
+  id: string;
+  note_id: string;
+  tag: string;
+  created_at: string;
+}
+
+export interface NoteLink {
+  id: string;
+  source_note_id: string;
+  target_note_id: string;
+  created_at: string;
+  target_title?: string;
+}
+
+export interface NoteAttachment {
+  id: string;
+  note_id: string;
+  file_id: string | null;
+  annotation_id: string | null;
+  created_at: string;
+  file?: StudyFile | null;
+}
+
 interface LocalDB {
   workspaces: Workspace[];
   license_codes: LicenseCode[];
@@ -133,6 +172,10 @@ interface LocalDB {
   annotations: AnnotationRecord[];
   diagram_labels: DiagramLabel[];
   recall_attempts: RecallAttempt[];
+  notes: Note[];
+  note_tags: NoteTag[];
+  note_links: NoteLink[];
+  note_attachments: NoteAttachment[];
 }
 
 const LOCAL_DB_PATH = path.join(process.cwd(), ".nara-local-db.json");
@@ -163,6 +206,10 @@ function readLocalDB(): LocalDB {
     annotations: [],
     diagram_labels: [],
     recall_attempts: [],
+    notes: [],
+    note_tags: [],
+    note_links: [],
+    note_attachments: [],
   };
 
   try {
@@ -181,6 +228,10 @@ function readLocalDB(): LocalDB {
         annotations: parsed.annotations || [],
         diagram_labels: parsed.diagram_labels || [],
         recall_attempts: parsed.recall_attempts || [],
+        notes: parsed.notes || [],
+        note_tags: parsed.note_tags || [],
+        note_links: parsed.note_links || [],
+        note_attachments: parsed.note_attachments || [],
       };
     }
   } catch (err) {
@@ -1239,6 +1290,427 @@ export async function getRecallStatsByFile(
     allMastered,
     labels: labelsWithAttempts,
   };
+}
+
+// ==========================================
+// NOTES MODULE API (Fase 5)
+// ==========================================
+
+export async function createNote(data: {
+  workspace_id: string;
+  subject_id?: string | null;
+  title: string;
+  content?: Record<string, unknown> | string | null;
+}): Promise<Note> {
+  const newNote: Note = {
+    id: `note_${crypto.randomUUID()}`,
+    workspace_id: data.workspace_id,
+    subject_id: data.subject_id || null,
+    title: data.title || "Catatan Tanpa Judul",
+    content: data.content || { type: "doc", content: [] },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("notes")
+      .insert(newNote)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.notes) db.notes = [];
+  db.notes.push(newNote);
+  writeLocalDB(db);
+  return newNote;
+}
+
+export async function getNotes(
+  workspaceId: string,
+  options?: { search?: string; subject_id?: string; tag?: string }
+): Promise<Note[]> {
+  let notes: Note[] = [];
+  let subjects: Subject[] = [];
+  let tags: NoteTag[] = [];
+  let links: NoteLink[] = [];
+  let attachments: NoteAttachment[] = [];
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("notes")
+      .select("*, subject:subjects(*)")
+      .eq("workspace_id", workspaceId);
+
+    if (options?.subject_id) {
+      query = query.eq("subject_id", options.subject_id);
+    }
+    if (options?.search) {
+      query = query.textSearch("search_vector", options.search, { type: "plain" });
+    }
+    const { data: notesData, error } = await query.order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    notes = notesData || [];
+
+    const noteIds = notes.map((n) => n.id);
+    if (noteIds.length > 0) {
+      const [{ data: tData }, { data: lData }, { data: aData }] = await Promise.all([
+        supabase.from("note_tags").select("*").in("note_id", noteIds),
+        supabase.from("note_links").select("*").in("source_note_id", noteIds),
+        supabase.from("note_attachments").select("*").in("note_id", noteIds),
+      ]);
+      tags = tData || [];
+      links = lData || [];
+      attachments = aData || [];
+    }
+  } else {
+    const db = readLocalDB();
+    subjects = db.subjects || [];
+    tags = db.note_tags || [];
+    links = db.note_links || [];
+    attachments = db.note_attachments || [];
+
+    notes = (db.notes || []).filter((n) => n.workspace_id === workspaceId);
+
+    if (options?.subject_id) {
+      notes = notes.filter((n) => n.subject_id === options.subject_id);
+    }
+    if (options?.search) {
+      const q = options.search.toLowerCase().trim();
+      notes = notes.filter((n) => {
+        const titleMatch = n.title.toLowerCase().includes(q);
+        const contentStr = typeof n.content === "string" ? n.content : JSON.stringify(n.content || {});
+        const contentMatch = contentStr.toLowerCase().includes(q);
+        return titleMatch || contentMatch;
+      });
+    }
+
+    notes.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  }
+
+  // Filter by tag if requested
+  if (options?.tag) {
+    const matchingNoteIds = new Set(
+      tags.filter((t) => t.tag.toLowerCase() === options.tag?.toLowerCase()).map((t) => t.note_id)
+    );
+    notes = notes.filter((n) => matchingNoteIds.has(n.id));
+  }
+
+  return notes.map((n) => {
+    const noteTags = tags.filter((t) => t.note_id === n.id).map((t) => t.tag);
+    const linksCount = links.filter((l) => l.source_note_id === n.id).length;
+    const attachmentsCount = attachments.filter((a) => a.note_id === n.id).length;
+    const sub = subjects.find((s) => s.id === n.subject_id) || n.subject || null;
+    return {
+      ...n,
+      subject: sub,
+      tags: noteTags,
+      links_count: linksCount,
+      attachments_count: attachmentsCount,
+    };
+  });
+}
+
+export async function getNoteById(
+  id: string,
+  workspaceId: string
+): Promise<(Note & {
+  tags: string[];
+  links: Array<{ id: string; target_note_id: string; title: string }>;
+  attachments: Array<{ id: string; file_id: string | null; annotation_id: string | null; file: StudyFile | null }>;
+}) | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: note, error } = await supabase
+      .from("notes")
+      .select("*, subject:subjects(*)")
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error || !note) return null;
+
+    const [{ data: tData }, { data: lData }, { data: aData }] = await Promise.all([
+      supabase.from("note_tags").select("*").eq("note_id", id),
+      supabase.from("note_links").select("*, target:notes(title)").eq("source_note_id", id),
+      supabase.from("note_attachments").select("*, file:study_files(*)").eq("note_id", id),
+    ]);
+
+    const tags = (tData || []).map((t: { tag: string }) => t.tag);
+    const links = (lData || []).map((l: { id: string; target_note_id: string; target?: { title: string } }) => ({
+      id: l.id,
+      target_note_id: l.target_note_id,
+      title: l.target?.title || "Catatan Terkait",
+    }));
+    const attachments = (aData || []).map((a: { id: string; file_id: string | null; annotation_id: string | null; file?: StudyFile | null }) => ({
+      id: a.id,
+      file_id: a.file_id,
+      annotation_id: a.annotation_id,
+      file: a.file || null,
+    }));
+
+    return {
+      ...note,
+      tags,
+      links,
+      attachments,
+    };
+  }
+
+  const db = readLocalDB();
+  const note = (db.notes || []).find((n) => n.id === id && n.workspace_id === workspaceId);
+  if (!note) return null;
+
+  const subject = (db.subjects || []).find((s) => s.id === note.subject_id) || null;
+  const tags = (db.note_tags || []).filter((t) => t.note_id === id).map((t) => t.tag);
+  const links = (db.note_links || [])
+    .filter((l) => l.source_note_id === id)
+    .map((l) => {
+      const targetNote = (db.notes || []).find((n) => n.id === l.target_note_id);
+      return {
+        id: l.id,
+        target_note_id: l.target_note_id,
+        title: targetNote?.title || "Catatan Terkait",
+      };
+    });
+  const attachments = (db.note_attachments || [])
+    .filter((a) => a.note_id === id)
+    .map((a) => {
+      const file = (db.study_files || []).find((f) => f.id === a.file_id) || null;
+      return {
+        id: a.id,
+        file_id: a.file_id,
+        annotation_id: a.annotation_id,
+        file,
+      };
+    });
+
+  return {
+    ...note,
+    subject,
+    tags,
+    links,
+    attachments,
+  };
+}
+
+export async function updateNote(
+  id: string,
+  workspaceId: string,
+  data: { title?: string; content?: Record<string, unknown> | string | null; subject_id?: string | null }
+): Promise<Note | null> {
+  const updated_at = new Date().toISOString();
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("notes")
+      .update({ ...data, updated_at })
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return updated;
+  }
+
+  const db = readLocalDB();
+  const noteIndex = (db.notes || []).findIndex((n) => n.id === id && n.workspace_id === workspaceId);
+  if (noteIndex === -1) return null;
+
+  const current = db.notes[noteIndex];
+  const updatedNote: Note = {
+    ...current,
+    title: data.title !== undefined ? data.title : current.title,
+    content: data.content !== undefined ? data.content : current.content,
+    subject_id: data.subject_id !== undefined ? data.subject_id : current.subject_id,
+    updated_at,
+  };
+  db.notes[noteIndex] = updatedNote;
+  writeLocalDB(db);
+  return updatedNote;
+}
+
+export async function deleteNote(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("notes")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.notes || []).length;
+  db.notes = (db.notes || []).filter((n) => !(n.id === id && n.workspace_id === workspaceId));
+  // Cascade in local db
+  db.note_tags = (db.note_tags || []).filter((t) => t.note_id !== id);
+  db.note_links = (db.note_links || []).filter((l) => l.source_note_id !== id && l.target_note_id !== id);
+  db.note_attachments = (db.note_attachments || []).filter((a) => a.note_id !== id);
+  writeLocalDB(db);
+  return db.notes.length < initLen;
+}
+
+// --- Note Tags ---
+export async function addNoteTag(noteId: string, tag: string, _workspaceId?: string): Promise<NoteTag> {
+  void _workspaceId;
+  const cleanTag = tag.trim().toLowerCase();
+  const newTag: NoteTag = {
+    id: `tag_${crypto.randomUUID()}`,
+    note_id: noteId,
+    tag: cleanTag,
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase.from("note_tags").insert(newTag).select().single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.note_tags) db.note_tags = [];
+  const exists = db.note_tags.some((t) => t.note_id === noteId && t.tag === cleanTag);
+  if (!exists) {
+    db.note_tags.push(newTag);
+    writeLocalDB(db);
+  }
+  return newTag;
+}
+
+export async function deleteNoteTag(noteId: string, tagText: string, _workspaceId?: string): Promise<boolean> {
+  void _workspaceId;
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("note_tags")
+      .delete()
+      .eq("note_id", noteId)
+      .eq("tag", tagText);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.note_tags || []).length;
+  db.note_tags = (db.note_tags || []).filter((t) => !(t.note_id === noteId && t.tag === tagText));
+  writeLocalDB(db);
+  return db.note_tags.length < initLen;
+}
+
+// --- Note Links ---
+export async function addNoteLink(
+  sourceNoteId: string,
+  targetNoteId: string,
+  _workspaceId?: string
+): Promise<NoteLink> {
+  void _workspaceId;
+  if (sourceNoteId === targetNoteId) {
+    throw new Error("Tidak dapat menautkan catatan ke dirinya sendiri.");
+  }
+
+  const newLink: NoteLink = {
+    id: `link_${crypto.randomUUID()}`,
+    source_note_id: sourceNoteId,
+    target_note_id: targetNoteId,
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase.from("note_links").insert(newLink).select().single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.note_links) db.note_links = [];
+  const exists = db.note_links.some(
+    (l) => l.source_note_id === sourceNoteId && l.target_note_id === targetNoteId
+  );
+  if (!exists) {
+    db.note_links.push(newLink);
+    writeLocalDB(db);
+  }
+  return newLink;
+}
+
+export async function deleteNoteLink(linkId: string, _workspaceId?: string): Promise<boolean> {
+  void _workspaceId;
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("note_links").delete().eq("id", linkId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.note_links || []).length;
+  db.note_links = (db.note_links || []).filter((l) => l.id !== linkId);
+  writeLocalDB(db);
+  return db.note_links.length < initLen;
+}
+
+// --- Note Attachments ---
+export async function addNoteAttachment(
+  noteId: string,
+  data: { file_id?: string | null; annotation_id?: string | null },
+  _workspaceId?: string
+): Promise<NoteAttachment> {
+  void _workspaceId;
+  const newAttachment: NoteAttachment = {
+    id: `att_${crypto.randomUUID()}`,
+    note_id: noteId,
+    file_id: data.file_id || null,
+    annotation_id: data.annotation_id || null,
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: created, error } = await supabase
+      .from("note_attachments")
+      .insert(newAttachment)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return created;
+  }
+
+  const db = readLocalDB();
+  if (!db.note_attachments) db.note_attachments = [];
+  const exists = db.note_attachments.some(
+    (a) => a.note_id === noteId && a.file_id === data.file_id && a.annotation_id === data.annotation_id
+  );
+  if (!exists) {
+    db.note_attachments.push(newAttachment);
+    writeLocalDB(db);
+  }
+  return newAttachment;
+}
+
+export async function deleteNoteAttachment(attachmentId: string, _workspaceId?: string): Promise<boolean> {
+  void _workspaceId;
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("note_attachments").delete().eq("id", attachmentId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const initLen = (db.note_attachments || []).length;
+  db.note_attachments = (db.note_attachments || []).filter((a) => a.id !== attachmentId);
+  writeLocalDB(db);
+  return db.note_attachments.length < initLen;
 }
 
 
