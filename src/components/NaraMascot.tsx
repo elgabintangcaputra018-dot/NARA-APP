@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 
 export type MascotPose = "idle" | "focus" | "thinking" | "success" | "error" | "sleep";
 
@@ -19,7 +19,6 @@ export const NaraMascot: React.FC<NaraMascotProps> = ({
   alt,
   showShadow = true,
 }) => {
-  const [imgError, setImgError] = useState(false);
 
   // Size mapping
   let dimension = 140;
@@ -374,22 +373,12 @@ export const NaraMascot: React.FC<NaraMascotProps> = ({
 
   return (
     <div
+      role="img"
+      aria-label={alt || defaultAlt}
       className={`inline-flex flex-col items-center justify-center relative transition-transform duration-200 ${className}`}
       style={{ width: dimension, height: dimension }}
     >
-      {!imgError ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={`/mascot/${pose}.png`}
-          alt={alt || defaultAlt}
-          width={dimension}
-          height={dimension}
-          className="object-contain select-none"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        renderFallbackSvg()
-      )}
+      {renderFallbackSvg()}
     </div>
   );
 };

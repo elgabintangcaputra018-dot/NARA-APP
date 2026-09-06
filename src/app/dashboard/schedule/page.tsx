@@ -361,12 +361,19 @@ export default function SchedulePage() {
 
                   {/* 7 Day Slots */}
                   {weekDays.map((day, dayIdx) => {
-                    const slotDateStr = day.toISOString().split("T")[0];
+                    const year = day.getFullYear();
+                    const month = String(day.getMonth() + 1).padStart(2, "0");
+                    const date = String(day.getDate()).padStart(2, "0");
+                    const slotDateStr = `${year}-${month}-${date}`;
 
                     // Find sessions matching this day and hour
                     const slotSessions = sessions.filter((s) => {
                       const sDate = new Date(s.start_time);
-                      const isSameDay = sDate.toISOString().split("T")[0] === slotDateStr;
+                      const sYear = sDate.getFullYear();
+                      const sMonth = String(sDate.getMonth() + 1).padStart(2, "0");
+                      const sDateDay = String(sDate.getDate()).padStart(2, "0");
+                      const sDateStr = `${sYear}-${sMonth}-${sDateDay}`;
+                      const isSameDay = sDateStr === slotDateStr;
                       const isSameHour = sDate.getHours() === hour;
                       return isSameDay && isSameHour;
                     });
