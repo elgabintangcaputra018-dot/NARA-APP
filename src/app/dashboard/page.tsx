@@ -7,13 +7,12 @@ export const dynamic = "force-dynamic";
 import { getSession, getWorkspace, getWorkspaceLicense, getDeviceSessions } from "@/lib/db";
 import NaraMascot from "@/components/NaraMascot";
 import NaraBubble from "@/components/NaraBubble";
-import ThemeToggle from "@/components/ThemeToggle";
+import Navbar from "@/components/Navbar";
 import {
   Laptop,
   Calendar,
   BookOpen,
   Sparkles,
-  LogOut,
   ChevronRight,
   ShieldCheck,
   Clock,
@@ -46,39 +45,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-light dark:bg-surface-dark transition-colors">
-      {/* Navbar */}
-      <header className="border-b border-surface-border-light dark:border-surface-border-dark bg-white/70 dark:bg-surface-dark/70 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-extrabold text-sm tracking-widest shadow-sm">
-              N
-            </div>
-            <div className="flex items-center">
-              <span className="font-extrabold text-lg tracking-tight text-zinc-900 dark:text-zinc-100">
-                NARA
-              </span>
-              <span className="ml-2 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-accent-navy/5 dark:bg-accent-navy/80 text-accent-navy dark:text-accent-light border border-accent/30 inline-flex items-center gap-1.5 shadow-sm">
-                <Sparkles className="w-3 h-3 text-highlight shrink-0" />
-                <span>OSN Companion</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <form action="/api/auth/logout" method="POST">
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                title="Keluar"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Keluar</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Content */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 md:px-8 py-8 space-y-8">
@@ -165,23 +132,29 @@ export default async function DashboardPage() {
             </div>
           </Link>
 
-          {/* Card 3: Study Cycle Progress (Foreshadowing Phase 2+) */}
-          <div className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between hover:border-highlight/30 transition-all">
+          {/* Card 3: Study Cycle Progress (Phase 2 Active) */}
+          <Link
+            href="/dashboard/schedule"
+            className="bg-white dark:bg-surface-card-dark rounded-2xl p-5 border border-surface-border-light dark:border-surface-border-dark shadow-sm flex flex-col justify-between hover:border-accent/40 group transition-all"
+          >
             <div className="flex items-center justify-between mb-4">
               <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                Siklus Belajar OSN
+                Jadwal Belajar
               </span>
-              <div className="w-8 h-8 rounded-lg bg-highlight-subtle dark:bg-highlight-subtle-dark flex items-center justify-center text-highlight border border-highlight/30">
-                <Sparkles className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-highlight-subtle dark:bg-highlight-subtle-dark flex items-center justify-center text-highlight border border-highlight/30 group-hover:scale-105 transition-transform">
+                <Calendar className="w-4 h-4" />
               </div>
             </div>
             <div>
-              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Fondasi Aktif</p>
+              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center justify-between">
+                <span>Kalender Belajar</span>
+                <ChevronRight className="w-4 h-4 text-zinc-400 group-hover:translate-x-1 transition-transform" />
+              </p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                Fase 0 & 1 Selesai. Modul Jadwal & Anotasi siap dibangun.
+                Atur sesi mingguan, drag-and-drop, dan sinkronkan ke Google Calendar.
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Feature Roadmap Preview (Upcoming Phases) */}
@@ -198,15 +171,21 @@ export default async function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-            <div className="p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/40 text-accent flex items-center justify-center shrink-0">
+            <Link
+              href="/dashboard/schedule"
+              className="p-4 rounded-2xl border border-accent/20 bg-accent-subtle/30 dark:bg-accent-navy/20 hover:border-accent/50 flex items-start gap-3.5 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/60 text-accent flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Calendar className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Jadwal Belajar & Google Sync</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Jadwal Belajar & Google Sync</p>
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Aktif</span>
+                </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">Atur target per materi dan sinkronkan dengan Google Calendar.</p>
               </div>
-            </div>
+            </Link>
 
             <div className="p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 flex items-center justify-center shrink-0">

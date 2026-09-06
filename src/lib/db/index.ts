@@ -38,11 +38,50 @@ export interface SessionRecord {
   created_at: string;
 }
 
+export interface Subject {
+  id: string;
+  workspace_id: string;
+  name: string;
+  priority: "very_high" | "high" | "medium" | "low" | "very_low";
+  mode: "intensive" | "moderate" | "deadline_crunch";
+  color: string;
+  created_at: string;
+}
+
+export interface StudySession {
+  id: string;
+  workspace_id: string;
+  subject_id: string;
+  title: string;
+  start_time: string;
+  duration_minutes: number;
+  status: "planned" | "in_progress" | "completed" | "cancelled";
+  source: "manual" | "auto_generated";
+  calendar_event_id: string | null;
+  created_at: string;
+  subject?: Subject;
+}
+
+export interface CalendarConnection {
+  id: string;
+  workspace_id: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string | null;
+  sync_mode: "two_way" | "read_only";
+  is_connected: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 interface LocalDB {
   workspaces: Workspace[];
   license_codes: LicenseCode[];
   device_sessions: DeviceSession[];
   sessions: SessionRecord[];
+  subjects: Subject[];
+  study_sessions: StudySession[];
+  calendar_connections: CalendarConnection[];
 }
 
 const LOCAL_DB_PATH = path.join(process.cwd(), ".nara-local-db.json");
@@ -61,20 +100,34 @@ function getSupabaseAdmin() {
 
 // Local File DB Helper
 function readLocalDB(): LocalDB {
-  try {
-    if (fs.existsSync(LOCAL_DB_PATH)) {
-      const data = fs.readFileSync(LOCAL_DB_PATH, "utf-8");
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.error("Error reading local db, initializing new:", err);
-  }
   const defaultDB: LocalDB = {
     workspaces: [],
     license_codes: [],
     device_sessions: [],
     sessions: [],
+    subjects: [],
+    study_sessions: [],
+    calendar_connections: [],
   };
+
+  try {
+    if (fs.existsSync(LOCAL_DB_PATH)) {
+      const data = fs.readFileSync(LOCAL_DB_PATH, "utf-8");
+      const parsed = JSON.parse(data);
+      return {
+        workspaces: parsed.workspaces || [],
+        license_codes: parsed.license_codes || [],
+        device_sessions: parsed.device_sessions || [],
+        sessions: parsed.sessions || [],
+        subjects: parsed.subjects || [],
+        study_sessions: parsed.study_sessions || [],
+        calendar_connections: parsed.calendar_connections || [],
+      };
+    }
+  } catch (err) {
+    console.error("Error reading local db, initializing new:", err);
+  }
+
   writeLocalDB(defaultDB);
   return defaultDB;
 }
@@ -397,3 +450,345 @@ export async function deleteSession(token: string): Promise<void> {
   db.sessions = db.sessions.filter((s) => s.token !== token);
   writeLocalDB(db);
 }
+
+// ==========================================
+// SUBJECTS API
+// ==========================================
+
+export async function getSubjects(workspaceId: string): Promise<Subject[]> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("subjects")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  const db = readLocalDB();
+  return db.subjects
+    .filter((s) => s.workspace_id === workspaceId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function createSubject(data: {
+  workspace_id: string;
+  name: string;
+  priority: "very_high" | "high" | "medium" | "low" | "very_low";
+  mode: "intensive" | "moderate" | "deadline_crunch";
+  color: string;
+}): Promise<Subject> {
+  const newSubject: Subject = {
+    id: crypto.randomUUID(),
+    workspace_id: data.workspace_id,
+    name: data.name,
+    priority: data.priority,
+    mode: data.mode,
+    color: data.color || "#6B95F1",
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: inserted, error } = await supabase
+      .from("subjects")
+      .insert(newSubject)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return inserted;
+  }
+
+  const db = readLocalDB();
+  db.subjects.push(newSubject);
+  writeLocalDB(db);
+  return newSubject;
+}
+
+export async function updateSubject(
+  id: string,
+  workspaceId: string,
+  data: Partial<Omit<Subject, "id" | "workspace_id" | "created_at">>
+): Promise<Subject | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("subjects")
+      .update(data)
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return updated || null;
+  }
+
+  const db = readLocalDB();
+  const idx = db.subjects.findIndex((s) => s.id === id && s.workspace_id === workspaceId);
+  if (idx === -1) return null;
+  db.subjects[idx] = { ...db.subjects[idx], ...data };
+  writeLocalDB(db);
+  return db.subjects[idx];
+}
+
+export async function deleteSubject(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("subjects")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const prevLen = db.subjects.length;
+  db.subjects = db.subjects.filter((s) => !(s.id === id && s.workspace_id === workspaceId));
+  // Also delete associated study sessions (cascade)
+  db.study_sessions = db.study_sessions.filter((sess) => !(sess.subject_id === id && sess.workspace_id === workspaceId));
+  const changed = db.subjects.length !== prevLen;
+  if (changed) writeLocalDB(db);
+  return changed;
+}
+
+// ==========================================
+// STUDY SESSIONS API
+// ==========================================
+
+export async function getStudySessions(
+  workspaceId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<StudySession[]> {
+  const subjects = await getSubjects(workspaceId);
+  const subjectsMap = new Map<string, Subject>(subjects.map((s) => [s.id, s]));
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("study_sessions")
+      .select("*")
+      .eq("workspace_id", workspaceId);
+
+    if (startDate) query = query.gte("start_time", startDate);
+    if (endDate) query = query.lte("start_time", endDate);
+
+    const { data, error } = await query.order("start_time", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map((session) => ({
+      ...session,
+      subject: subjectsMap.get(session.subject_id),
+    }));
+  }
+
+  const db = readLocalDB();
+  let sessions = db.study_sessions.filter((s) => s.workspace_id === workspaceId);
+  if (startDate) {
+    const startMs = new Date(startDate).getTime();
+    sessions = sessions.filter((s) => new Date(s.start_time).getTime() >= startMs);
+  }
+  if (endDate) {
+    const endMs = new Date(endDate).getTime();
+    sessions = sessions.filter((s) => new Date(s.start_time).getTime() <= endMs);
+  }
+
+  return sessions
+    .map((s) => ({ ...s, subject: subjectsMap.get(s.subject_id) }))
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+}
+
+export async function createStudySession(data: {
+  workspace_id: string;
+  subject_id: string;
+  title: string;
+  start_time: string;
+  duration_minutes: number;
+  status?: "planned" | "in_progress" | "completed" | "cancelled";
+  source?: "manual" | "auto_generated";
+  calendar_event_id?: string | null;
+}): Promise<StudySession> {
+  const newSession: StudySession = {
+    id: crypto.randomUUID(),
+    workspace_id: data.workspace_id,
+    subject_id: data.subject_id,
+    title: data.title,
+    start_time: data.start_time,
+    duration_minutes: data.duration_minutes || 60,
+    status: data.status || "planned",
+    source: data.source || "manual",
+    calendar_event_id: data.calendar_event_id || null,
+    created_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: inserted, error } = await supabase
+      .from("study_sessions")
+      .insert(newSession)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return inserted;
+  }
+
+  const db = readLocalDB();
+  db.study_sessions.push(newSession);
+  writeLocalDB(db);
+  return newSession;
+}
+
+export async function updateStudySession(
+  id: string,
+  workspaceId: string,
+  data: Partial<Omit<StudySession, "id" | "workspace_id" | "created_at" | "subject">>
+): Promise<StudySession | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("study_sessions")
+      .update(data)
+      .eq("id", id)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return updated || null;
+  }
+
+  const db = readLocalDB();
+  const idx = db.study_sessions.findIndex((s) => s.id === id && s.workspace_id === workspaceId);
+  if (idx === -1) return null;
+  db.study_sessions[idx] = { ...db.study_sessions[idx], ...data };
+  writeLocalDB(db);
+  return db.study_sessions[idx];
+}
+
+export async function deleteStudySession(id: string, workspaceId: string): Promise<boolean> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("study_sessions")
+      .delete()
+      .eq("id", id)
+      .eq("workspace_id", workspaceId);
+    if (error) throw new Error(error.message);
+    return true;
+  }
+
+  const db = readLocalDB();
+  const prevLen = db.study_sessions.length;
+  db.study_sessions = db.study_sessions.filter((s) => !(s.id === id && s.workspace_id === workspaceId));
+  const changed = db.study_sessions.length !== prevLen;
+  if (changed) writeLocalDB(db);
+  return changed;
+}
+
+// ==========================================
+// CALENDAR CONNECTIONS API
+// ==========================================
+
+export async function getCalendarConnection(workspaceId: string): Promise<CalendarConnection | null> {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("calendar_connections")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") console.error("Supabase getCalendarConnection error:", error);
+    return data || null;
+  }
+
+  const db = readLocalDB();
+  return db.calendar_connections.find((c) => c.workspace_id === workspaceId) || null;
+}
+
+export async function saveCalendarConnection(data: {
+  workspace_id: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string | null;
+  sync_mode?: "two_way" | "read_only";
+}): Promise<CalendarConnection> {
+  const now = new Date().toISOString();
+  const record: CalendarConnection = {
+    id: crypto.randomUUID(),
+    workspace_id: data.workspace_id,
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: data.expires_at,
+    sync_mode: data.sync_mode || "two_way",
+    is_connected: true,
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: upserted, error } = await supabase
+      .from("calendar_connections")
+      .upsert(record, { onConflict: "workspace_id" })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return upserted;
+  }
+
+  const db = readLocalDB();
+  const idx = db.calendar_connections.findIndex((c) => c.workspace_id === data.workspace_id);
+  if (idx !== -1) {
+    db.calendar_connections[idx] = {
+      ...db.calendar_connections[idx],
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: data.expires_at,
+      sync_mode: data.sync_mode || db.calendar_connections[idx].sync_mode,
+      is_connected: true,
+      updated_at: now,
+    };
+    writeLocalDB(db);
+    return db.calendar_connections[idx];
+  }
+
+  db.calendar_connections.push(record);
+  writeLocalDB(db);
+  return record;
+}
+
+export async function updateCalendarSettings(
+  workspaceId: string,
+  data: { sync_mode?: "two_way" | "read_only"; is_connected?: boolean }
+): Promise<CalendarConnection | null> {
+  const now = new Date().toISOString();
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from("calendar_connections")
+      .update({ ...data, updated_at: now })
+      .eq("workspace_id", workspaceId)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return updated || null;
+  }
+
+  const db = readLocalDB();
+  const idx = db.calendar_connections.findIndex((c) => c.workspace_id === workspaceId);
+  if (idx === -1) return null;
+  db.calendar_connections[idx] = {
+    ...db.calendar_connections[idx],
+    ...data,
+    updated_at: now,
+  };
+  writeLocalDB(db);
+  return db.calendar_connections[idx];
+}
+
+export async function disconnectCalendar(workspaceId: string): Promise<boolean> {
+  return (await updateCalendarSettings(workspaceId, { is_connected: false })) !== null;
+}
+
